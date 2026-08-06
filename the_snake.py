@@ -4,6 +4,7 @@ import pygame
 
 # Константы для размеров поля и сетки:
 SCREEN_WIDTH, SCREEN_HEIGHT = 640, 480
+SCREEN_CENTER = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
 GRID_SIZE = 20
 GRID_WIDTH = SCREEN_WIDTH // GRID_SIZE
 GRID_HEIGHT = SCREEN_HEIGHT // GRID_SIZE
@@ -36,67 +37,65 @@ pygame.display.set_caption('Змейка')
 clock = pygame.time.Clock()
 
 
-def get_random_position(occupied=()):
-    """Возвращает случайную свободную клетку на поле."""
-    occupied = set(occupied)
-    while True:
-        position = (
-            randint(0, GRID_WIDTH - 1) * GRID_SIZE,
-            randint(0, GRID_HEIGHT - 1) * GRID_SIZE,
-        )
-        if position not in occupied:
-            return position
-
-
 class GameObject:
     """Базовый класс игрового объекта."""
 
     def __init__(self, position=None, body_color=None):
         """Инициализирует позицию и цвет объекта."""
-        if position is None:
-            position = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
         self.position = position
         self.body_color = body_color
 
+    def randomize_position(self, occupied=None):
+        """Поиск случайной свободной клетки на поле."""
+        if occupied is None:
+            occupied = ()
+        while True:
+            position = (
+                randint(0, GRID_WIDTH - 1) * GRID_SIZE,
+                randint(0, GRID_HEIGHT - 1) * GRID_SIZE,
+            )
+            if position not in occupied:
+                self.position = position
+                return
+
     def draw(self):
         """Отрисовывает объект на игровом поле."""
-        rect = pygame.Rect(self.position, (GRID_SIZE, GRID_SIZE))
-        pygame.draw.rect(screen, self.body_color, rect)
-        pygame.draw.rect(screen, BORDER_COLOR, rect, 1)
+        pass
+
+    def draw_cell(self, position=None, color=None):
+        """Отрисовывает единственный элемент на игровом поле."""
+        if position is None:
+            position = self.position
+        if color is None:
+            color = self.body_color
+        rect = pygame.Rect(position, (GRID_SIZE, GRID_SIZE))
+        pygame.draw.rect(screen, color, rect)
+        if color != BOARD_BACKGROUND_COLOR:
+            pygame.draw.rect(screen, BORDER_COLOR, rect, 1)
 
 
 class Apple(GameObject):
     """Класс яблока — еды для змейки."""
 
-    def __init__(self, body_color=APPLE_COLOR):
-        """Задаёт цвет яблока и случайную позицию на поле."""
-        super().__init__(body_color=body_color)
-        self.randomize_position()
-
-    def randomize_position(self, occupied=()):
-        """Устанавливает случайную позицию яблока на игровом поле."""
-        self.position = get_random_position(occupied)
+    def __init__(self, *args, body_color=APPLE_COLOR, **kwargs):
+        """Задаёт цвет яблока."""
+        super().__init__(*args, body_color=body_color, **kwargs)
 
 
-class Poison(Apple):
-    """«Неправильная» еда — уменьшает длину змейки."""
+class Poison(GameObject):
+    """Класс ядовитая еда."""
 
-    def __init__(self):
+    def __init__(self, *args, body_color=POISON_COLOR, **kwargs):
         """Создаёт ядовитую еду с отдельным цветом."""
-        super().__init__(body_color=POISON_COLOR)
+        super().__init__(*args, body_color=body_color, **kwargs)
 
 
 class Rock(GameObject):
-    """Препятствие: при столкновении змейка сбрасывается."""
+    """Класс препятствие."""
 
-    def __init__(self):
-        """Размещает камень в случайной клетке."""
-        super().__init__(body_color=ROCK_COLOR)
-        self.randomize_position()
-
-    def randomize_position(self, occupied=()):
-        """Устанавливает случайную позицию камня."""
-        self.position = get_random_position(occupied)
+    def __init__(self, *args, body_color=ROCK_COLOR, **kwargs):
+        """Создаёт камень с отдельным цветом."""
+        super().__init__(*args, body_color=body_color, **kwargs)
 
 
 class Snake(GameObject):
@@ -105,12 +104,8 @@ class Snake(GameObject):
     def __init__(self, body_color=SNAKE_COLOR):
         """Инициализирует змейку в центре поля."""
         super().__init__(body_color=body_color)
-        self.length = 1
-        self.positions = [self.position]
+        self.reset()
         self.direction = RIGHT
-        self.next_direction = None
-        self.last = None
-        self.removed = []
 
     def get_head_position(self):
         """Возвращает позицию головы змейки."""
@@ -150,7 +145,7 @@ class Snake(GameObject):
     def reset(self):
         """Сбрасывает змейку в начальное состояние."""
         self.length = 1
-        self.positions = [(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)]
+        self.positions = [SCREEN_CENTER]
         self.position = self.positions[0]
         self.direction = choice([UP, DOWN, LEFT, RIGHT])
         self.next_direction = None
@@ -159,18 +154,10 @@ class Snake(GameObject):
 
     def draw(self):
         """Отрисовывает змейку на игровой поверхности."""
-        for position in self.positions[:-1]:
-            rect = pygame.Rect(position, (GRID_SIZE, GRID_SIZE))
-            pygame.draw.rect(screen, self.body_color, rect)
-            pygame.draw.rect(screen, BORDER_COLOR, rect, 1)
-
-        head_rect = pygame.Rect(self.positions[0], (GRID_SIZE, GRID_SIZE))
-        pygame.draw.rect(screen, self.body_color, head_rect)
-        pygame.draw.rect(screen, BORDER_COLOR, head_rect, 1)
+        self.draw_cell()
 
         for position in self.removed:
-            last_rect = pygame.Rect(position, (GRID_SIZE, GRID_SIZE))
-            pygame.draw.rect(screen, BOARD_BACKGROUND_COLOR, last_rect)
+            self.draw_cell(position, BOARD_BACKGROUND_COLOR)
 
 
 def handle_keys(game_object):
@@ -179,7 +166,7 @@ def handle_keys(game_object):
         if event.type == pygame.QUIT:
             pygame.quit()
             raise SystemExit
-        elif event.type == pygame.KEYDOWN:
+        if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP and game_object.direction != DOWN:
                 game_object.next_direction = UP
             elif event.key == pygame.K_DOWN and game_object.direction != UP:
@@ -241,14 +228,14 @@ def main():
             poison.randomize_position(occupied_cells(snake, apple))
             rock.randomize_position(occupied_cells(snake, apple, poison))
 
-        if snake.get_head_position() in snake.positions[1:]:
+        elif snake.get_head_position() in snake.positions[4:]:
             snake.reset()
             screen.fill(BOARD_BACKGROUND_COLOR)
 
         snake.draw()
-        apple.draw()
-        poison.draw()
-        rock.draw()
+        apple.draw_cell()
+        poison.draw_cell()
+        rock.draw_cell()
         pygame.display.update()
 
 
